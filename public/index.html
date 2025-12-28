@@ -162,6 +162,7 @@ const spread=document.getElementById("spread");
 let isFetching=false;
 let poller=null;
 
+/* ================= FETCH GOLD ================= */
 async function loadGold(){
   if(isFetching) return;
   isFetching=true;
@@ -232,15 +233,32 @@ function startNormal(){
   clearInterval(poller);
   poller=setInterval(loadGold,NORMAL_INTERVAL);
 }
-function startAggressive(){
+
+function startFast(){
   clearInterval(poller);
   poller=setInterval(loadGold,FAST_INTERVAL);
   setTimeout(startNormal,FAST_DURATION);
 }
 
-// init
+// Sinkronisasi polling tiap menit
+function syncPollingByMinute(){
+  const now=new Date(Date.now()+offset);
+  const sec=now.getSeconds();
+
+  if(sec<5){
+    // Detik 0-4: langsung fast polling
+    startFast();
+  }else{
+    // Tunggu sampai detik 0 berikutnya
+    const msToNextMinute=(60-sec)*1000;
+    setTimeout(()=>startFast(),msToNextMinute);
+  }
+}
+
+// Init saat page load
 loadGold();
-startAggressive();
+syncPollingByMinute();
+
 </script>
 
 </body>
