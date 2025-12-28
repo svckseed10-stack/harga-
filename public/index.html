@@ -41,10 +41,10 @@ h1{font-size:18px;margin-bottom:10px}
 }
 #spread,#profit,#profit2{margin-top:14px;font-weight:600}
 #spread{color:#f0e68c}
-.flash{animation:flash 0.5s ease-out}
+.flash{animation:flash .5s ease-out}
 @keyframes flash{
-  0%{background-color:rgba(255,255,0,0.2)}
-  50%{background-color:rgba(255,255,0,0.5)}
+  0%{background-color:rgba(255,255,0,.2)}
+  50%{background-color:rgba(255,255,0,.5)}
   100%{background-color:transparent}
 }
 #chartWrapper{
@@ -118,51 +118,45 @@ function hitung(sell,buy,nilai,modal){
   const gram=nilai/buy;
   const jual=gram*sell;
   const profit=jual-modal;
-  return{profit,gram,profitGram:profit/sell};
+  return{profit,profitGram:profit/sell};
 }
 function updateProfit(sell,buy){
   const a=hitung(sell,buy,nilai20,modal20);
   const b=hitung(sell,buy,nilai30,modal30);
-  document.getElementById("profit").innerHTML=`Profit 20jt: Rp ${fmt(a.profit)} (${fmt4(a.profitGram)} gr)`;
-  document.getElementById("profit2").innerHTML=`Profit 30jt: Rp ${fmt(b.profit)} (${fmt4(b.profitGram)} gr)`;
+  profit.innerHTML=`Profit 20jt: Rp ${fmt(a.profit)} (${fmt4(a.profitGram)} gr)`;
+  profit2.innerHTML=`Profit 30jt: Rp ${fmt(b.profit)} (${fmt4(b.profitGram)} gr)`;
 }
 
-/* ================= WAKTU SERVER ================= */
+/* ================= WAKTU SERVER (SYNC WIB) ================= */
 let offset=0;
+let lastTimestamp=null;
+
 async function syncTime(){
   try{
     const r=await fetch("https://worldtimeapi.org/api/timezone/Asia/Jakarta",{cache:"no-store"});
     const d=await r.json();
-    offset=d.unixtime*1000-Date.now();
+    offset=(d.unixtime*1000)-Date.now();
   }catch(e){
-    console.error("Gagal sync waktu server:",e);
+    console.error("Time sync failed:",e);
   }
 }
 syncTime();
 setInterval(syncTime,5*60*1000);
 
-function clock(){
+setInterval(()=>{
   const now=new Date(Date.now()+offset);
-  document.getElementById("time").innerText=now.toLocaleTimeString("id-ID",{hour12:false}) + 
-    " | Last update: " + (lastTimestamp ? new Date(lastTimestamp).toLocaleTimeString("id-ID",{hour12:false}) : "--:--:--");
-}
-setInterval(clock,1000);
+  time.innerText=
+    now.toLocaleTimeString("id-ID",{hour12:false})+
+    " | Last update: "+
+    (lastTimestamp
+      ? new Date(lastTimestamp).toLocaleTimeString("id-ID",{hour12:false})
+      : "--:--:--");
+},1000);
 
 /* ================= GOLD ================= */
 let lastBuy=null,lastSell=null;
-let lastBuyDiff=0,lastSellDiff=0;
-let lastTimestamp=null;
-
-const buyEl=document.getElementById("buy");
-const sellEl=document.getElementById("sell");
-const buyDiff=document.getElementById("buyDiff");
-const sellDiff=document.getElementById("sellDiff");
-const spread=document.getElementById("spread");
-
 let isFetching=false;
-let poller=null;
 
-/* ================= FETCH GOLD ================= */
 async function loadGold(){
   if(isFetching) return;
   isFetching=true;
@@ -172,53 +166,43 @@ async function loadGold(){
     const d=await r.json();
     if(!d.updated_at) return;
 
-    const buy=Number(d.buying_rate);
-    const sell=Number(d.selling_rate);
+    const buyVal=+d.buying_rate;
+    const sellVal=+d.selling_rate;
     const ts=new Date(d.updated_at.replace(" ","T")).getTime();
 
     if(lastTimestamp && ts<=lastTimestamp) return;
     lastTimestamp=ts;
 
-    buyEl.classList.remove("green","red","fade");
-    sellEl.classList.remove("green","red","fade");
+    buy.className="value";
+    sell.className="value";
 
     if(lastBuy!==null){
-      lastBuyDiff=buy-lastBuy;
-      if(lastBuyDiff!==0) buyEl.classList.add(lastBuyDiff>0?"green":"red","fade");
+      buy.classList.add(buyVal>lastBuy?"green":"red","fade");
+      buyDiff.innerHTML=buyVal-lastBuy
+        ?`<span class="${buyVal>lastBuy?"green":"red"}">${buyVal>lastBuy?"⬆":"⬇"} ${fmt(buyVal-lastBuy)}</span>`
+        :`<span class="neutral">(0)</span>`;
     }
+
     if(lastSell!==null){
-      lastSellDiff=sell-lastSell;
-      if(lastSellDiff!==0) sellEl.classList.add(lastSellDiff>0?"green":"red","fade");
+      sell.classList.add(sellVal>lastSell?"green":"red","fade");
+      sellDiff.innerHTML=sellVal-lastSell
+        ?`<span class="${sellVal>lastSell?"green":"red"}">${sellVal>lastSell?"⬆":"⬇"} ${fmt(sellVal-lastSell)}</span>`
+        :`<span class="neutral">(0)</span>`;
     }
 
-    buyEl.innerText=fmt(buy);
-    sellEl.innerText=fmt(sell);
+    buy.innerText=fmt(buyVal);
+    sell.innerText=fmt(sellVal);
+    spread.innerText="Spread: "+fmt(buyVal-sellVal);
+    updateProfit(sellVal,buyVal);
 
-    buyDiff.innerHTML=
-      lastBuyDiff>0?`<span class="green">⬆ +${fmt(lastBuyDiff)}</span>`:
-      lastBuyDiff<0?`<span class="red">⬇ ${fmt(lastBuyDiff)}</span>`:
-      `<span class="neutral">(0)</span>`;
+    time.classList.remove("flash");
+    void time.offsetWidth;
+    time.classList.add("flash");
 
-    sellDiff.innerHTML=
-      lastSellDiff>0?`<span class="green">⬆ +${fmt(lastSellDiff)}</span>`:
-      lastSellDiff<0?`<span class="red">⬇ ${fmt(lastSellDiff)}</span>`:
-      `<span class="neutral">(0)</span>`;
-
-    spread.innerText="Spread: "+fmt(buy-sell);
-    updateProfit(sell,buy);
-
-    // flash timestamp
-    const timeEl=document.getElementById("time");
-    timeEl.classList.remove("flash");
-    void timeEl.offsetWidth;
-    timeEl.classList.add("flash");
-
-    lastBuy=buy;
-    lastSell=sell;
+    lastBuy=buyVal;
+    lastSell=sellVal;
     adjustCardWidth();
 
-  }catch(e){
-    console.error("Gold error:",e);
   }finally{
     isFetching=false;
   }
@@ -226,8 +210,9 @@ async function loadGold(){
 
 /* ================= POLLING ================= */
 const FAST_INTERVAL=200;
-const FAST_DURATION=5000; // 5 detik
+const FAST_DURATION=5000;
 const NORMAL_INTERVAL=5000;
+let poller=null;
 
 function startNormal(){
   clearInterval(poller);
@@ -240,25 +225,20 @@ function startFast(){
   setTimeout(startNormal,FAST_DURATION);
 }
 
-// Sinkronisasi polling tiap menit
 function syncPollingByMinute(){
   const now=new Date(Date.now()+offset);
   const sec=now.getSeconds();
 
   if(sec<5){
-    // Detik 0-4: langsung fast polling
     startFast();
   }else{
-    // Tunggu sampai detik 0 berikutnya
-    const msToNextMinute=(60-sec)*1000;
-    setTimeout(()=>startFast(),msToNextMinute);
+    setTimeout(startFast,(60-sec)*1000);
   }
 }
 
-// Init saat page load
+/* ================= INIT ================= */
 loadGold();
 syncPollingByMinute();
-
 </script>
 
 </body>
